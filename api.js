@@ -21,7 +21,7 @@ db.connect();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-// register a user
+// Register a new user
 app.post("/register", async (req, res) => {
   const name = req.body.name;
   const email = req.body.email;
@@ -37,10 +37,12 @@ app.post("/register", async (req, res) => {
   }
 });
 
+// Create a new task for a user
 app.post("/addtask", async (req, res) => {
   const { user_id, title, description, status, due_data } = req.body;
 
   try {
+    // Verify user exists
     const usercheck = await db.query("SELECT * FROM users WHERE name = $1", [
       user_id,
     ]);
@@ -50,6 +52,7 @@ app.post("/addtask", async (req, res) => {
 
     const actualUserId = usercheck.rows[0].id;
 
+    // Insert task and return created record
     const results = await db.query(
       "INSERT INTO todos (user_id, title, description, status, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
       [actualUserId, title, description, status, due_data],
@@ -61,6 +64,26 @@ app.post("/addtask", async (req, res) => {
     });
   } catch (error) {
     console.error("Error finding users", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get all tasks for a specific user
+app.get("/alltasks/:userID", async (req, res) => {
+  const userId = req.params.userID;
+  try {
+    const usertask = await db.query("SELECT * FROM todos WHERE user_id = $1", [
+      userId,
+    ]);
+    if (usertask.rows.length === 0) {
+      return res.status(404).json({ error: "No tasks found for this user" });
+    }
+    res.status(200).json({
+      message: "Results found",
+      tasks: usertask.rows,
+    });
+  } catch (error) {
+    console.error("Tasks not found", error);
     res.status(500).json({ error: error.message });
   }
 });
