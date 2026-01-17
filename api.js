@@ -38,28 +38,30 @@ app.post("/register", async (req, res) => {
 });
 
 app.post("/addtask", async (req, res) => {
-  const { user_id, title, description,status,due_data} = req.body;
+  const { user_id, title, description, status, due_data } = req.body;
 
   try {
     const usercheck = await db.query("SELECT * FROM users WHERE name = $1", [
       user_id,
     ]);
-    if (user_id.rows.length > 0) {
+    if (usercheck.rows.length === 0) {
       return res.status(400).json({ error: "User does not exist" });
     }
 
-    const  results = await db.query(
-      "INSERT INTO todos (user_id, title, description) VALUES ($1, $2, $3 ,$4 , $5) RETURNING *",
-      [user_id, title, description,status,due_data]
+    const actualUserId = usercheck.rows[0].id;
+
+    const results = await db.query(
+      "INSERT INTO todos (user_id, title, description, status, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
+      [actualUserId, title, description, status, due_data],
     );
 
     res.status(201).json({
       message: "Todo created successfully",
-      todo : results.rows[0]
-    })
+      todo: results.rows[0],
+    });
   } catch (error) {
     console.error("Error finding users", error);
-    res.status(500).json({ error: error.message});
+    res.status(500).json({ error: error.message });
   }
 });
 
