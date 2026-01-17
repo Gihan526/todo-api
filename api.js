@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT;
 
 const db = new pg.Client({
   user: process.env.DB_USER,
@@ -18,6 +18,7 @@ const db = new pg.Client({
 
 db.connect();
 
+app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
 app.listen(port, () => {
