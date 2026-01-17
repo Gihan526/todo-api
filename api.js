@@ -21,6 +21,22 @@ db.connect();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// register a user
+app.post("/register", async (req, res) => {
+  const name = req.body.name;
+  const email = req.body.email;
+  try {
+    await db.query("INSERT INTO users (name, email) VALUES ($1, $2)", [
+      name,
+      email,
+    ]);
+    res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    console.error("Error registering user:", error);
+    res.status(500).json({ error: "Failed to register user" });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
