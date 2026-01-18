@@ -151,6 +151,52 @@ app.delete("/deletetask/:userID/:id", async (req, res) => {
   }
 });
 
+// Update task status
+app.patch("/completetask/:userID/:id", async (req, res) => {
+  const id = req.params.id;
+  const userId = req.params.userID;
+  const userinput = req.body.userinput;
+
+  const allowed = ["pending", "in progress", "done"];
+
+  if (!allowed.includes(userinput?.toLowerCase().trim())) {
+    return res.status(400).json({
+      error: "Status must be: pending, in progress, or done",
+    });
+  }
+
+  try {
+    // Check if task exists and belongs to this user
+    const taskCheck = await db.query(
+      "SELECT * FROM todos WHERE id = $1 AND user_id = $2",
+      [id, userId],
+    );
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found for this user" });
+    }
+
+    // Update task status
+    const updatecomplete = await db.query(
+      "UPDATE todos SET status = $1 WHERE id = $2 AND user_id = $3 RETURNING *",
+      [userinput, id, userId],
+    );
+
+    res.status(200).json({
+      message: "Task status updated successfully",
+      task: updatecomplete.rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating task status", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+
+
+
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
