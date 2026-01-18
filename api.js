@@ -88,6 +88,38 @@ app.get("/alltasks/:userID", async (req, res) => {
   }
 });
 
+// Update a task
+app.put("/updatetasks/:userID/:id", async (req, res) => {
+  const id = req.params.id;
+  const userId = req.params.userID;
+  const { title, description, status, due_data } = req.body;
+
+  try {
+    // Check if task exists and belongs to this user
+    const taskCheck = await db.query(
+      "SELECT * FROM todos WHERE id = $1 AND user_id = $2",
+      [id, userId],
+    );
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found for this user" });
+    }
+
+    // Update the task
+    const update = await db.query(
+      "UPDATE todos SET title = $1, description = $2, status = $3, due_date = $4 WHERE id = $5 RETURNING *",
+      [title, description, status, due_data, id],
+    );
+
+    res.status(200).json({
+      message: "Task updated successfully",
+      task: update.rows[0],
+    });
+  } catch (error) {
+    console.error("Error updating task", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
