@@ -26,11 +26,14 @@ app.post("/register", async (req, res) => {
   const name = req.body.name;
   const email = req.body.email;
   try {
-    await db.query("INSERT INTO users (name, email) VALUES ($1, $2)", [
-      name,
-      email,
-    ]);
-    res.status(201).json({ message: "User registered successfully" });
+    const results = await db.query(
+      "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *",
+      [name, email],
+    );
+    res.status(201).json({
+      message: "User registered successfully",
+      user: results.rows[0],
+    });
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).json({ error: "Failed to register user" });
