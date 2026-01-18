@@ -191,11 +191,39 @@ app.patch("/completetask/:userID/:id", async (req, res) => {
   }
 });
 
+// Filter tasks by status
+app.get("/filtertasks/:userID", async (req, res) => {
+  const userId = req.params.userID;
+  const status = req.query.status;
 
+  if (!status) {
+    return res
+      .status(400)
+      .json({ error: "Status query parameter is required" });
+  }
 
+  try {
+    // Get tasks for user with specific status
+    const filteredTasks = await db.query(
+      "SELECT * FROM todos WHERE user_id = $1 AND status = $2",
+      [userId, status],
+    );
 
+    if (filteredTasks.rows.length === 0) {
+      return res.status(404).json({
+        error: `No tasks found with status '${status}' for this user`,
+      });
+    }
 
-
+    res.status(200).json({
+      message: "Tasks found",
+      tasks: filteredTasks.rows,
+    });
+  } catch (error) {
+    console.error("Error filtering tasks", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
