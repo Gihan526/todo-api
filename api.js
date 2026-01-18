@@ -21,6 +21,30 @@ db.connect();
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+// API Information
+app.get("/", (req, res) => {
+  res.json({
+    message: "Todo API - Welcome!",
+    version: "1.0.0",
+    endpoints: {
+      users: {
+        register: "POST /register - Register a new user",
+      },
+      tasks: {
+        create: "POST /addtask - Create a new task",
+        getAll: "GET /alltasks/:userID - Get all tasks for a user",
+        filter:
+          "GET /filtertasks/:userID?status=pending - Filter tasks by status",
+        update: "PUT /updatetasks/:userID/:id - Update a task",
+        updateStatus: "PATCH /completetask/:userID/:id - Update task status",
+        delete: "DELETE /deletetask/:userID/:id - Delete a task",
+      },
+    },
+    statusValues: ["pending", "in progress", "done"],
+    documentation: "See README.md for detailed documentation",
+  });
+});
+
 // Register a new user
 app.post("/register", async (req, res) => {
   const name = req.body.name;
