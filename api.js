@@ -120,6 +120,37 @@ app.put("/updatetasks/:userID/:id", async (req, res) => {
   }
 });
 
+// Delete a task
+app.delete("/deletetask/:userID/:id", async (req, res) => {
+  const id = req.params.id;
+  const userId = req.params.userID;
+
+  try {
+    // Check if task exists and belongs to this user
+    const taskCheck = await db.query(
+      "SELECT * FROM todos WHERE id = $1 AND user_id = $2",
+      [id, userId],
+    );
+    if (taskCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Task not found for this user" });
+    }
+
+    // Delete the task
+    const del = await db.query(
+      "DELETE FROM todos WHERE id = $1 AND user_id = $2 RETURNING *",
+      [id, userId],
+    );
+
+    res.status(200).json({
+      message: "Task deleted successfully",
+      deletedTask: del.rows[0],
+    });
+  } catch (error) {
+    console.error("Error deleting task", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
 });
