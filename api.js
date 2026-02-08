@@ -3,11 +3,17 @@ import bodyParser from "body-parser";
 import pg from "pg";
 import dotenv from "dotenv";
 import cors from "cors";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 dotenv.config();
 
 const app = express();
 const port = process.env.PORT;
+const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
+const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
+console.log("Access:", ACCESS_SECRET ? "Loaded " : "Missing ");
+
 
 const db = new pg.Client({
   user: process.env.DB_USER,
@@ -25,12 +31,13 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 // Register a new user
 app.post("/register", async (req, res) => {
-  const name = req.body.name;
-  const email = req.body.email;
+  const { name, email, password } = req.body;
+
   try {
+    const hashed = await bcrypt.hash(password, 10);
     const results = await db.query(
-      "INSERT INTO users (name, email) VALUES ($1, $2) RETURNING *",
-      [name, email],
+      "INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email",
+      [name, email, hashed]
     );
     res.status(201).json({
       message: "User registered successfully",
