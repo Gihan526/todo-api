@@ -5,15 +5,23 @@ import dotenv from "dotenv";
 import cors from "cors";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import cookieParser from "cookie-parser";
 
 dotenv.config();
+app.use(cookieParser());
+
+app.use(
+  cors({
+    origin: "http://localhost:5173", // your React dev URL (change if different)
+    credentials: true,
+  }),
+);
 
 const app = express();
 const port = process.env.PORT;
 const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
 console.log("Access:", ACCESS_SECRET ? "Loaded " : "Missing ");
-
 
 const db = new pg.Client({
   user: process.env.DB_USER,
@@ -29,15 +37,27 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
+function signAccessToken(userId) {
+  return jwt.sign({ sub: userId }, ACCESS_SECRET, {
+    expiresIn: "5m",
+  });
+}
+
+function signRefreshToken(userId) {
+  return jwt.sign({ sub: userId }, REFRESH_SECRET, {
+    expiresIn: "7d",
+  });
+}
+
 // Register a new user
-app.post("/register", async (req, res) => {
+app.post("/auth/register", async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
     const hashed = await bcrypt.hash(password, 10);
     const results = await db.query(
       "INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email",
-      [name, email, hashed]
+      [name, email, hashed],
     );
     res.status(201).json({
       message: "User registered successfully",
@@ -46,6 +66,75 @@ app.post("/register", async (req, res) => {
   } catch (error) {
     console.error("Error registering user:", error);
     res.status(500).json({ error: "Failed to register user" });
+  }
+});
+
+app.post("/auth/login", async (req, res) => {
+  const { name, password } = req.body;
+  try {
+    const usercheck = await db.query("SELECT * FROM users WHERE name = $1", [
+      name,
+    ]);
+
+    if (usercheck.rows.length === 0) {
+      return res.status(400).json({ error: "User does not exist" });
+    }
+
+    const user = usercheck.rows[0];
+    const passwordMatch = await bcrypt.compare(password, user.password_hash);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid password" });
+    }
+
+    const accessToken = signAccessToken(user.id);
+    const refreshToken = signRefreshToken(user.id);
+
+    const refreshTokenstore = await db.query(
+      "INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2) RETURNING id, token",
+      [user.id, refreshToken],
+    );
+    res.status(201).json({
+      message: "User loged successfully",
+      user: refreshTokenstore.rows[0],
+    });
+
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: false, // set true in production (HTTPS)
+      sameSite: "lax", // ok for localhost dev
+      path: "/auth", // cookie sent only to /auth routes
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.json({ accessToken });
+  } catch (error) {
+    console.error("Error logging in:", error);
+    res.status(500).json({ error: "Failed to login" });
+  }
+});
+
+app.post("/auth/logout", async (req, res) => {
+  try {
+    const rt = req.cookies.refreshToken;
+    if (rt) {
+      const delRefreshtoken = await db.query(
+        "DELETE FROM refresh_tokens WHERE token = $1 RETURNING *",
+        [rt],
+      );
+    }
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/auth",
+    });
+
+    res.json({ message: "logged out" });
+  } catch (error) {
+    console.error("Error logging out:", error);
+    res.status(500).json({ error: "Failed to logout" });
   }
 });
 
