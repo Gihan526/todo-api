@@ -31,6 +31,8 @@ app.use(
     credentials: true,
   }),
 );
+
+
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -56,7 +58,7 @@ function requireAuth(req, res, next) {
   const token = header.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    const decoded = jwt.verify(token, ACCESS_SECRET);
     req.userId = decoded.sub;
     next();
   } catch {
