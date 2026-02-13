@@ -49,6 +49,24 @@ function signRefreshToken(userId) {
   });
 }
 
+function requireAuth(req, res, next) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    return res.status(401).json({ message: "Missing access token" });
+  }
+
+  const token = header.split(" ")[1];
+
+  try {
+    const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    req.userId = decoded.sub;
+    next();
+  } catch {
+    return res.status(401).json({ message: "Access token expired/invalid" });
+  }
+}
+
+
 // Register a new user
 app.post("/auth/register", async (req, res) => {
   const { name, email, password } = req.body;
@@ -111,6 +129,29 @@ app.post("/auth/login", async (req, res) => {
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "Failed to login" });
+  }
+});
+
+app.post("/auth/refresh", async (req, res) => {
+  const rt = req.cookies.refreshToken;
+  if (!rt) return res.status(401).json({ message: "No refresh cookie" });
+
+  const saved = await db.query(
+    "SELECT * FROM refresh_tokens WHERE token = $1",
+    [rt],
+  );
+  if (saved.rows.length === 0)
+    return res.status(403).json({ message: "Refresh revoked" });
+
+  try {
+    const decoded = jwt.verify(rt, REFRESH_SECRET);
+    if (decoded.sub !== saved.rows[0].user_id)
+      return res.status(403).json({ message: "Refresh mismatch" });
+
+    const newAccessToken = signAccessToken(decoded.sub);
+    res.json({ accessToken: newAccessToken });
+  } catch {
+    return res.status(403).json({ message: "Refresh expired/invalid" });
   }
 });
 
