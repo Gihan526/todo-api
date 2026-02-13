@@ -8,14 +8,6 @@ import jwt from "jsonwebtoken";
 import cookieParser from "cookie-parser";
 
 dotenv.config();
-app.use(cookieParser());
-
-app.use(
-  cors({
-    origin: "http://localhost:5173", // your React dev URL (change if different)
-    credentials: true,
-  }),
-);
 
 const app = express();
 const port = process.env.PORT;
@@ -33,7 +25,13 @@ const db = new pg.Client({
 
 db.connect();
 
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  }),
+);
+app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
@@ -65,7 +63,6 @@ function requireAuth(req, res, next) {
     return res.status(401).json({ message: "Access token expired/invalid" });
   }
 }
-
 
 // Register a new user
 app.post("/auth/register", async (req, res) => {
@@ -108,14 +105,10 @@ app.post("/auth/login", async (req, res) => {
     const accessToken = signAccessToken(user.id);
     const refreshToken = signRefreshToken(user.id);
 
-    const refreshTokenstore = await db.query(
-      "INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2) RETURNING id, token",
+    await db.query(
+      "INSERT INTO refresh_tokens (user_id, token) VALUES ($1, $2)",
       [user.id, refreshToken],
     );
-    res.status(201).json({
-      message: "User loged successfully",
-      user: refreshTokenstore.rows[0],
-    });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
@@ -125,7 +118,11 @@ app.post("/auth/login", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    res.json({ accessToken });
+    res.json({
+      message: "User logged in successfully",
+      accessToken,
+      user: { id: user.id, name: user.name, email: user.email },
+    });
   } catch (error) {
     console.error("Error logging in:", error);
     res.status(500).json({ error: "Failed to login" });
@@ -180,7 +177,7 @@ app.post("/auth/logout", async (req, res) => {
 });
 
 // Create a new task for a user
-app.post("/addtask", async (req, res) => {
+app.post("/addtask", requireAuth, async (req, res) => {
   const { user_id, title, description, status, due_data } = req.body;
 
   try {
@@ -211,7 +208,7 @@ app.post("/addtask", async (req, res) => {
 });
 
 // Get all tasks for a specific user
-app.get("/alltasks/:userID", async (req, res) => {
+app.get("/alltasks/:userID", requireAuth, async (req, res) => {
   const userId = req.params.userID;
   try {
     const usertask = await db.query("SELECT * FROM todos WHERE user_id = $1", [
@@ -231,7 +228,7 @@ app.get("/alltasks/:userID", async (req, res) => {
 });
 
 // Update a task
-app.put("/updatetasks/:userID/:id", async (req, res) => {
+app.put("/updatetasks/:userID/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
   const userId = req.params.userID;
   const { title, description, status, due_data } = req.body;
@@ -263,7 +260,7 @@ app.put("/updatetasks/:userID/:id", async (req, res) => {
 });
 
 // Delete a task
-app.delete("/deletetask/:userID/:id", async (req, res) => {
+app.delete("/deletetask/:userID/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
   const userId = req.params.userID;
 
@@ -294,7 +291,7 @@ app.delete("/deletetask/:userID/:id", async (req, res) => {
 });
 
 // Update task status
-app.patch("/completetask/:userID/:id", async (req, res) => {
+app.patch("/completetask/:userID/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
   const userId = req.params.userID;
   const userinput = req.body.userinput;
@@ -334,7 +331,7 @@ app.patch("/completetask/:userID/:id", async (req, res) => {
 });
 
 // Filter tasks by status
-app.get("/filtertasks/:userID", async (req, res) => {
+app.get("/filtertasks/:userID", requireAuth, async (req, res) => {
   const userId = req.params.userID;
   const status = req.query.status;
 
