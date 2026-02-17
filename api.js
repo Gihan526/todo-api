@@ -27,11 +27,10 @@ db.connect();
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: "http://localhost:5174",
     credentials: true,
   }),
 );
-
 
 app.use(cookieParser());
 app.use(bodyParser.json());
@@ -50,12 +49,11 @@ function signRefreshToken(userId) {
 }
 
 function requireAuth(req, res, next) {
-  const header = req.headers.authorization;
-  if (!header?.startsWith("Bearer ")) {
+  const token = req.cookies.accessToken;
+
+  if (!token) {
     return res.status(401).json({ message: "Missing access token" });
   }
-
-  const token = header.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, ACCESS_SECRET);
@@ -115,14 +113,21 @@ app.post("/auth/login", async (req, res) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: false, // set true in production (HTTPS)
-      sameSite: "lax", // ok for localhost dev
-      path: "/auth", // cookie sent only to /auth routes
+      sameSite: "lax",
+      path: "/",
       maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 5 * 60 * 1000, // 5 minutes
     });
 
     res.json({
       message: "User logged in successfully",
-      accessToken,
       user: { id: user.id, name: user.name, email: user.email },
     });
   } catch (error) {
@@ -158,7 +163,7 @@ app.post("/auth/logout", async (req, res) => {
   try {
     const rt = req.cookies.refreshToken;
     if (rt) {
-      const delRefreshtoken = await db.query(
+      await db.query(
         "DELETE FROM refresh_tokens WHERE token = $1 RETURNING *",
         [rt],
       );
@@ -168,7 +173,14 @@ app.post("/auth/logout", async (req, res) => {
       httpOnly: true,
       secure: false,
       sameSite: "lax",
-      path: "/auth",
+      path: "/",
+    });
+
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
     });
 
     res.json({ message: "logged out" });
@@ -183,7 +195,7 @@ app.post("/addtask", requireAuth, async (req, res) => {
   const { user_id, title, description, status, due_data } = req.body;
 
   try {
-    // Verify user exists
+    // Verify user exists by name
     const usercheck = await db.query("SELECT * FROM users WHERE name = $1", [
       user_id,
     ]);
@@ -228,7 +240,21 @@ app.get("/alltasks/:userID", requireAuth, async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
+// Get all tasks for the authenticated user
+app.get("/mytasks", requireAuth, async (req, res) => {
+  try {
+    const usertask = await db.query("SELECT * FROM todos WHERE user_id = $1", [
+      req.userId,
+    ]);
+    res.status(200).json({
+      message: usertask.rows.length > 0 ? "Results found" : "No tasks yet",
+      tasks: usertask.rows,
+    });
+  } catch (error) {
+    console.error("Tasks not found", error);
+    res.status(500).json({ error: error.message });
+  }
+});
 // Update a task
 app.put("/updatetasks/:userID/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
