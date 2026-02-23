@@ -153,7 +153,17 @@ app.post("/auth/refresh", async (req, res) => {
       return res.status(403).json({ message: "Refresh mismatch" });
 
     const newAccessToken = signAccessToken(decoded.sub);
-    res.json({ accessToken: newAccessToken });
+
+    // Set new access token cookie
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 5 * 60 * 1000, // 5 minutes
+    });
+
+    res.json({ message: "Token refreshed" });
   } catch {
     return res.status(403).json({ message: "Refresh expired/invalid" });
   }
