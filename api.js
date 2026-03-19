@@ -10,10 +10,16 @@ import cookieParser from "cookie-parser";
 dotenv.config();
 
 const app = express();
-const port = process.env.PORT;
+const port = process.env.PORT || 4000;
 const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET;
 const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET;
+const CLIENT_URL = process.env.CLIENT_URL;
+const isProduction = process.env.NODE_ENV === "production";
 console.log("Access:", ACCESS_SECRET ? "Loaded " : "Missing ");
+
+if (!CLIENT_URL) {
+  throw new Error("Missing CLIENT_URL environment variable");
+}
 
 const db = new pg.Client({
   user: process.env.DB_USER,
@@ -27,7 +33,7 @@ db.connect();
 
 app.use(
   cors({
-    origin: "http://localhost:5174",
+    origin: CLIENT_URL,
     credentials: true,
   }),
 );
@@ -35,6 +41,16 @@ app.use(
 app.use(cookieParser());
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
+
+function getCookieOptions(maxAge) {
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
+    ...(maxAge ? { maxAge } : {}),
+  };
+}
 
 function signAccessToken(userId) {
   return jwt.sign({ sub: userId }, ACCESS_SECRET, {
@@ -110,21 +126,13 @@ app.post("/auth/login", async (req, res) => {
       [user.id, refreshToken],
     );
 
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: false, // set true in production (HTTPS)
-      sameSite: "lax",
-      path: "/",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie(
+      "refreshToken",
+      refreshToken,
+      getCookieOptions(7 * 24 * 60 * 60 * 1000),
+    );
 
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 5 * 60 * 1000, // 5 minutes
-    });
+    res.cookie("accessToken", accessToken, getCookieOptions(5 * 60 * 1000));
 
     res.json({
       message: "User logged in successfully",
@@ -154,14 +162,7 @@ app.post("/auth/refresh", async (req, res) => {
 
     const newAccessToken = signAccessToken(decoded.sub);
 
-    // Set new access token cookie
-    res.cookie("accessToken", newAccessToken, {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 5 * 60 * 1000, // 5 minutes
-    });
+    res.cookie("accessToken", newAccessToken, getCookieOptions(5 * 60 * 1000));
 
     res.json({ message: "Token refreshed" });
   } catch {
@@ -179,19 +180,9 @@ app.post("/auth/logout", async (req, res) => {
       );
     }
 
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      path: "/",
-    });
+    res.clearCookie("refreshToken", getCookieOptions());
 
-    res.clearCookie("accessToken", {
-      httpOnly: true,
-      secure: false,
-      sameSite: "lax",
-      path: "/",
-    });
+    res.clearCookie("accessToken", getCookieOptions());
 
     res.json({ message: "logged out" });
   } catch (error) {
@@ -202,7 +193,8 @@ app.post("/auth/logout", async (req, res) => {
 
 // Create a new task for a user
 app.post("/addtask", requireAuth, async (req, res) => {
-  const { user_id, title, description, status, due_data } = req.body;
+  const { user_id, title, description, status, due_date, due_data } = req.body;
+  const resolvedDueDate = due_date ?? due_data;
 
   try {
     // Verify user exists by name
@@ -218,7 +210,7 @@ app.post("/addtask", requireAuth, async (req, res) => {
     // Insert task and return created record
     const results = await db.query(
       "INSERT INTO todos (user_id, title, description, status, due_date) VALUES ($1, $2, $3, $4, $5) RETURNING *",
-      [actualUserId, title, description, status, due_data],
+      [actualUserId, title, description, status, resolvedDueDate],
     );
 
     res.status(201).json({
@@ -269,7 +261,8 @@ app.get("/mytasks", requireAuth, async (req, res) => {
 app.put("/updatetasks/:userID/:id", requireAuth, async (req, res) => {
   const id = req.params.id;
   const userId = req.params.userID;
-  const { title, description, status, due_data } = req.body;
+  const { title, description, status, due_date, due_data } = req.body;
+  const resolvedDueDate = due_date ?? due_data;
 
   try {
     // Check if task exists and belongs to this user
@@ -284,7 +277,7 @@ app.put("/updatetasks/:userID/:id", requireAuth, async (req, res) => {
     // Update the task
     const update = await db.query(
       "UPDATE todos SET title = $1, description = $2, status = $3, due_date = $4 WHERE id = $5 RETURNING *",
-      [title, description, status, due_data, id],
+      [title, description, status, resolvedDueDate, id],
     );
 
     res.status(200).json({
@@ -403,5 +396,5 @@ app.get("/filtertasks/:userID", requireAuth, async (req, res) => {
 });
 
 app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+  console.log(`Server running on port ${port}`);
 });

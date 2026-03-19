@@ -10,16 +10,19 @@ Node.js, Express, PostgreSQL
 
 ```bash
 npm install
+cp .env.example .env
 ```
 
-Create `.env`:
+Required `.env` values:
 ```
+PORT=4000
+NODE_ENV=development
+CLIENT_URL=https://your-todo-app.vercel.app
 DB_USER=postgres
-DB_HOST=localhost
+DB_HOST=your_db_host
 DB_NAME=postgres
 DB_PASSWORD=your_password
-DB_PORT=5433
-PORT=3000
+DB_PORT=5432
 ACCESS_TOKEN_SECRET=your_access_secret
 REFRESH_TOKEN_SECRET=your_refresh_secret
 ```
@@ -43,12 +46,25 @@ CREATE TABLE todos (
   due_date DATE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE refresh_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 Start:
 ```bash
 npm start
 ```
+
+## Deployment notes
+
+- Set `CLIENT_URL` to your frontend URL. Example: `https://your-todo-app.vercel.app`
+- Set `NODE_ENV=production` in Render so auth cookies are sent with `secure: true` and `sameSite: "none"` for cross-origin requests.
+- The frontend must send requests with credentials enabled. This repo already expects that.
 
 ## Endpoints
 
